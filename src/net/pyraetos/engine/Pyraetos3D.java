@@ -23,7 +23,6 @@ public abstract class Pyraetos3D {
 	 * TODO:
 	 * Implement frustrum culling
 	 * Implement depth culling
-	 * Perform model*view on gfx card?
 	 */
 	
 	//Constants
