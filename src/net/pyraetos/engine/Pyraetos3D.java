@@ -415,18 +415,20 @@ public abstract class Pyraetos3D {
 		Block.MESH.bind();
 		int rx = toRegionCoord(camera.getX());
 		int ry = toRegionCoord(camera.getZ());
-		for(int ri = rx - 2; ri <= rx + 2; ri++){
-			for(int rj = ry - 2; rj <= ry + 2; rj++){
+		for(int ri = rx - 1; ri <= rx + 1; ri++){
+			for(int rj = ry -1; rj <= ry +1; rj++){
 				if(regions[ri + (1<<8)][rj + (1<<8)] == null){
 					genRegionAsync(ri, rj);
 					continue;
 				}
 				Region r = regions[ri + (1<<8)][rj + (1<<8)];
 				for(Block block : r.getBlocks()){
-					if(!shouldClip(block)){
-						setModelWorldUniforms(block);
-						block.render();
-					}
+					//if(!shouldClip(block)){
+						if(inFrustum(block.getModelViewMatrix(camera.getViewMatrix()))){
+							setModelWorldUniforms(block);
+							block.render();
+						}
+					//}
 				}
 			}
 		}
@@ -440,6 +442,20 @@ public abstract class Pyraetos3D {
 		renderSkybox();
 		renderWorld();
 		glfwSwapBuffers(window);
+	}
+	
+	private static Matrix woof = new Matrix();
+	private static Vector bork = new Vector(0,0,0);
+	private static Vector result = new Vector(0,0,0);
+	
+	private static boolean inFrustum(Matrix modelView){
+		Matrix.multiply(modelView, perspectiveMatrix, woof);
+		float w = Matrix.multiply(woof, bork, 1, result);
+		result.multiply(1f / w);
+		float x = result.getX();
+		float y = result.getY();
+		float z = result.getZ();
+		return x > -1f && x < 1f && y > -1f && y < 1f && z > -0.05f && z < 1f;
 	}
 	
 	private static void setGlobalWorldUniforms(){
