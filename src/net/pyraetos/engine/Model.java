@@ -46,13 +46,13 @@ public abstract class Model extends MovableObject implements Serializable{
 	}
 	
 	public MatrixBuffer getLightModelViewMatrix(Matrix lightViewMatrix){
-		Matrix.multiply(transformationMatrix, lightViewMatrix, lightModelViewMatrix);
+		Matrix.multiply(lightViewMatrix, transformationMatrix, lightModelViewMatrix);
 		lightModelViewMatrix.updateBuffer();
 		return lightModelViewMatrix;
 	}
 	
 	public MatrixBuffer getModelViewMatrix(Matrix viewMatrix){
-		Matrix.multiply(transformationMatrix, viewMatrix, modelViewMatrix);
+		Matrix.multiply(viewMatrix, transformationMatrix, modelViewMatrix);
 		modelViewMatrix.updateBuffer();
 		return modelViewMatrix;
 	}

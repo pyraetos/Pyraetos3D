@@ -256,8 +256,8 @@ public abstract class GraphicsUtil{
 		translation(a, dx, dy, dz);
 		rotation(b, p, y, r);
 		scale(c, sx, sy, sz);
-		Matrix.multiply(c, b, dest);
-		Matrix.multiply(dest, a, dest);
+		Matrix.multiply(b, c, dest);
+		Matrix.multiply(a, dest, dest);
 	}
 
 	public static void view(Matrix dest, Matrix a, Matrix b, Vector translation, Vector rotation){
@@ -271,7 +271,7 @@ public abstract class GraphicsUtil{
 	public static void view(Matrix dest, Matrix a, Matrix b, float dx, float dy, float dz, float p, float y, float r){
 		translation(a, -dx, -dy, -dz);
 		rotation(b, p, y, r);
-		Matrix.multiply(a, b, dest);
+		Matrix.multiply(b, a, dest);
 	}
 	
 	public static void lightView(Matrix dest, Matrix a, Matrix b, Vector dir, float x, float z){

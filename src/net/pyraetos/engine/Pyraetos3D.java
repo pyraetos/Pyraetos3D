@@ -21,7 +21,6 @@ public abstract class Pyraetos3D {
 
 	/*
 	 * TODO:
-	 * Implement frustrum culling
 	 * Implement depth culling
 	 */
 	
@@ -334,7 +333,7 @@ public abstract class Pyraetos3D {
 	}
 	
 	private static boolean inFrustum(Matrix modelView){
-		Matrix.multiply(modelView, perspectiveMatrix, frustumPH);
+		Matrix.multiply(perspectiveMatrix, modelView, frustumPH);
 		float w = Matrix.multiply(frustumPH, vecPH0, 1, vecPH1);
 		vecPH1.multiply(1f / w);
 		float x = vecPH1.getX();
