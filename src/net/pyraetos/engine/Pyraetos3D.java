@@ -29,7 +29,6 @@ public abstract class Pyraetos3D {
 	public static final int WIDTH = 2100;
 	public static final int HEIGHT = 1400;
 	public static final float FOV = Sys.toRadians(60.0f);
-	public static final float SIDE_CLIP = Sys.toRadians(60.0f);
 	public static final float FAR_CLIP = 500.0f;
 	public static final float NEAR_CLIP = .05f;
 	public static final long FRAME_TIME = 17l;
@@ -64,9 +63,6 @@ public abstract class Pyraetos3D {
 	//Camera
 	private static Camera camera;
 	private static float remainingPitch;
-	private static float minYaw;
-	private static float maxYaw;
-	private static float sideClip;
 	
 	//Light
 	private static ShadowMap shadowMap;
@@ -139,10 +135,6 @@ public abstract class Pyraetos3D {
 		//Start camera
 		camera = new Camera();
 		camera.setTranslation(0f, 5f, 10f);
-		float yaw = camera.getYaw();
-		minYaw = Sys.simplifyAngler(yaw - SIDE_CLIP);
-		maxYaw = Sys.simplifyAngler(yaw + SIDE_CLIP);
-		sideClip = SIDE_CLIP;
 	    
 		//Initialize shadow map
 		shadowMap = new ShadowMap();
@@ -267,9 +259,6 @@ public abstract class Pyraetos3D {
 	
 	private static void updateCameraYaw(float dyaw){
 		camera.rotate(0f, dyaw, 0f);
-		float yaw = camera.getYaw();
-		minYaw = Sys.simplifyAngler(yaw - sideClip);
-		maxYaw = Sys.simplifyAngler(yaw + sideClip);
 	}
 
 	private static void mouseInput(){
@@ -319,19 +308,7 @@ public abstract class Pyraetos3D {
 		skybox.setTranslation(camera.getTranslation());
 		updatePerformance();
 	}
-	
-	private static boolean shouldClip(Model m){
-		if(!(camera.getPitch() < 0.1 || camera.getPitch() > 6.18f))
-			return false;
-		float i = camera.getX() - m.getX();
-		float j = camera.getZ() - m.getZ();
-		float d = Sys.distance(i, j);
-		if(d <= 3f)
-			return false;
-		float theta = Sys.direction(i, j);
-		return !Sys.between(theta, minYaw, maxYaw);
-	}
-	
+
 	private static boolean inFrustum(Matrix modelView){
 		Matrix.multiply(perspectiveMatrix, modelView, frustumPH);
 		float w = Matrix.multiply(frustumPH, vecPH0, 1, vecPH1);
@@ -363,11 +340,9 @@ public abstract class Pyraetos3D {
 			mesh.bind();
 			Set<Model> set = models.get(mesh);
 			for(Model model : set){
-				if(!shouldClip(model)){
-					MatrixBuffer lightModelViewMatrix = model.getLightModelViewMatrix(lightViewMatrix);
-					Shader.DEPTH.setUniform("lightMV", lightModelViewMatrix);
-					model.renderIgnoreMaterial();
-				}
+				MatrixBuffer lightModelViewMatrix = model.getLightModelViewMatrix(lightViewMatrix);
+				Shader.DEPTH.setUniform("lightMV", lightModelViewMatrix);
+				model.renderIgnoreMaterial();
 			}
 			mesh.unbind();
 		}
@@ -381,11 +356,9 @@ public abstract class Pyraetos3D {
 				}
 				Region r = regions[ri + (1<<8)][rj + (1<<8)];
 				for(Block block : r.getBlocks()){
-					if(!shouldClip(block)){
-						MatrixBuffer lightModelViewMatrix = block.getLightModelViewMatrix(lightViewMatrix);
-						Shader.DEPTH.setUniform("lightMV", lightModelViewMatrix);
-						block.renderIgnoreMaterial();
-					}
+					MatrixBuffer lightModelViewMatrix = block.getLightModelViewMatrix(lightViewMatrix);
+					Shader.DEPTH.setUniform("lightMV", lightModelViewMatrix);
+					block.renderIgnoreMaterial();
 				}
 			}
 		}
@@ -421,7 +394,7 @@ public abstract class Pyraetos3D {
 			mesh.bind();
 			Set<Model> set = models.get(mesh);
 			for(Model model : set){
-				if(!shouldClip(model)){
+				if(isClose(model) || inFrustum(model.getModelViewMatrix(camera.getViewMatrix()))){
 					setModelWorldUniforms(model);
 					model.render();
 				}
