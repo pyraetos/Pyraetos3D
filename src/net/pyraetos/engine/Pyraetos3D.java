@@ -23,6 +23,7 @@ public abstract class Pyraetos3D {
 	 * TODO:
 	 * Implement SSAO
 	 * Implement depth culling
+	 * Test ways to add more underground blocks
 	 */
 	
 	//Constants
