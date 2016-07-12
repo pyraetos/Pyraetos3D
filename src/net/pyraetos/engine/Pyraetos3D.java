@@ -58,6 +58,9 @@ public abstract class Pyraetos3D {
 	private static float aspect;
 	private static MatrixBuffer perspectiveMatrix;
 	private static MatrixBuffer orthographicMatrix;
+	private static Matrix frustumPH = new Matrix();
+	private static Vector vecPH0 = new Vector(0,0,0);
+	private static Vector vecPH1 = new Vector(0,0,0);
 	
 	//Camera
 	private static Camera camera;
@@ -329,6 +332,20 @@ public abstract class Pyraetos3D {
 		float theta = Sys.direction(i, j);
 		return !Sys.between(theta, minYaw, maxYaw);
 	}
+	
+	private static boolean inFrustum(Matrix modelView){
+		Matrix.multiply(modelView, perspectiveMatrix, frustumPH);
+		float w = Matrix.multiply(frustumPH, vecPH0, 1, vecPH1);
+		vecPH1.multiply(1f / w);
+		float x = vecPH1.getX();
+		float y = vecPH1.getY();
+		float z = vecPH1.getZ();
+		return x > -1.25f && x < 1.25f && y > -1.25f && y < 1.25f && z > -0.05f && z < 1.25f;
+	}
+	
+	private static boolean isClose(Model m){
+		return Sys.distanceFrom(camera.getTranslation(), m.getTranslation()) < 7f;
+	}
 
 	private static void clear(){
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -423,12 +440,10 @@ public abstract class Pyraetos3D {
 				}
 				Region r = regions[ri + (1<<8)][rj + (1<<8)];
 				for(Block block : r.getBlocks()){
-					//if(!shouldClip(block)){
-						if(inFrustum(block.getModelViewMatrix(camera.getViewMatrix()))){
-							setModelWorldUniforms(block);
-							block.render();
-						}
-					//}
+					if(isClose(block) || inFrustum(block.getModelViewMatrix(camera.getViewMatrix()))){
+						setModelWorldUniforms(block);
+						block.render();
+					}
 				}
 			}
 		}
@@ -442,20 +457,6 @@ public abstract class Pyraetos3D {
 		renderSkybox();
 		renderWorld();
 		glfwSwapBuffers(window);
-	}
-	
-	private static Matrix woof = new Matrix();
-	private static Vector bork = new Vector(0,0,0);
-	private static Vector result = new Vector(0,0,0);
-	
-	private static boolean inFrustum(Matrix modelView){
-		Matrix.multiply(modelView, perspectiveMatrix, woof);
-		float w = Matrix.multiply(woof, bork, 1, result);
-		result.multiply(1f / w);
-		float x = result.getX();
-		float y = result.getY();
-		float z = result.getZ();
-		return x > -1f && x < 1f && y > -1f && y < 1f && z > -0.05f && z < 1f;
 	}
 	
 	private static void setGlobalWorldUniforms(){
