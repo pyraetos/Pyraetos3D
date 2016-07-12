@@ -21,6 +21,7 @@ public abstract class Pyraetos3D {
 
 	/*
 	 * TODO:
+	 * Implement SSAO
 	 * Implement depth culling
 	 */
 	
