@@ -24,6 +24,7 @@ public abstract class Pyraetos3D {
 	 * Implement SSAO
 	 * Implement depth culling
 	 * Test ways to add more underground blocks
+	 * Improve polymorphism of model classes
 	 */
 	
 	//Constants
@@ -58,6 +59,7 @@ public abstract class Pyraetos3D {
 	private static float aspect;
 	private static MatrixBuffer perspectiveMatrix;
 	private static MatrixBuffer orthographicMatrix;
+	private static MatrixBuffer orthographicDepthMatrix;
 	private static Matrix frustumPH = new Matrix();
 	private static Vector vecPH0 = new Vector(0,0,0);
 	private static Vector vecPH1 = new Vector(0,0,0);
@@ -68,6 +70,7 @@ public abstract class Pyraetos3D {
 	
 	//Light
 	private static ShadowMap shadowMap;
+	private static ShadowMap depthMap;
 	private static boolean shadowsEnabled;
 	
 	//Game objects
@@ -140,6 +143,7 @@ public abstract class Pyraetos3D {
 	    
 		//Initialize shadow map
 		shadowMap = new ShadowMap();
+		depthMap = new ShadowMap();
 		shadowsEnabled = true;
 
 	    //Initialize projection
@@ -149,12 +153,20 @@ public abstract class Pyraetos3D {
 	    orthographicMatrix = new MatrixBuffer();
 	    GraphicsUtil.orthographicProjection(orthographicMatrix, -SHADOW_BOX_WIDTH/2f, SHADOW_BOX_WIDTH/2f, -SHADOW_BOX_HEIGHT/2f, SHADOW_BOX_HEIGHT/2f, -SHADOW_BOX_DEPTH/2f, SHADOW_BOX_DEPTH/2f);
 	    orthographicMatrix.updateBuffer();
+	    orthographicDepthMatrix = new MatrixBuffer();
+	    GraphicsUtil.orthographicProjection(orthographicDepthMatrix, -SHADOW_BOX_WIDTH/8f, SHADOW_BOX_WIDTH/8f, -SHADOW_BOX_HEIGHT/8f, SHADOW_BOX_HEIGHT/8f, 0f, SHADOW_BOX_DEPTH/2f);
+	    orthographicDepthMatrix.updateBuffer();
 	    
 	    //Initialize skybox
 	    skybox = new Skybox(Skybox.MORNING);
 	    
 	    //Initialize model map
 	    models = new ConcurrentHashMap<Mesh, Set<Model>>();
+	    Quad tx = new Quad(0, 10, -10);
+	    tx.rotate(Sys.PI / 2f, 0f, 0f);
+	    Set<Model> s = Sys.concurrentSet(Model.class);
+	    s.add(tx);
+	    models.put(tx.getMesh(), s);
 	    
 	    //Initialize regions
 	    beingGenerated = Sys.concurrentSet(int[].class);
@@ -308,6 +320,9 @@ public abstract class Pyraetos3D {
 	private static void update(){
 		cameraPitch();
 		skybox.setTranslation(camera.getTranslation());
+		for(Set<Model> set : models.values())
+			for(Model m : set)
+				m.setTranslation(camera.getX(), camera.getY(), camera.getZ() - 3);
 		updatePerformance();
 	}
 
@@ -329,6 +344,54 @@ public abstract class Pyraetos3D {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	}
 	
+	private static void renderDepthMap(){
+		if(!shadowsEnabled)
+			return;
+		depthMap.bind();
+		glViewport(0, 0, ShadowMap.WIDTH, ShadowMap.HEIGHT);
+		glClear(GL_DEPTH_BUFFER_BIT);
+		Shader.DEPTH.bind();
+		Shader.DEPTH.setUniform("ortho", perspectiveMatrix);
+		Shader.DEPTH.setUniform("isOrtho", false);
+		Matrix viewMatrix = camera.getViewMatrix();
+		//Don't do these right now
+		/*
+		for(Mesh mesh : models.keySet()){
+			mesh.bind();
+			Set<Model> set = models.get(mesh);
+			for(Model model : set){
+				MatrixBuffer lightModelViewMatrix = model.getLightModelViewMatrix(lightViewMatrix);
+				Shader.DEPTH.setUniform("lightMV", lightModelViewMatrix);
+				model.renderIgnoreMaterial();
+			}
+			mesh.unbind();
+		}
+		*/
+		Block.MESH.bind();
+		int rx = toRegionCoord(camera.getX());
+		int ry = toRegionCoord(camera.getZ());
+		for(int ri = rx - 1; ri <= rx + 1; ri++){
+			for(int rj = ry - 1; rj <= ry + 1; rj++){
+				if(regions[ri + (1<<8)][rj + (1<<8)] == null){
+					continue;
+				}
+				Region r = regions[ri + (1<<8)][rj + (1<<8)];
+				for(Block block : r.getBlocks()){
+					if(isClose(block) || inFrustum(block.getModelViewMatrix(viewMatrix))){
+						MatrixBuffer modelViewMatrix = block.getModelViewMatrix(viewMatrix);
+						Shader.DEPTH.setUniform("lightMV", modelViewMatrix);
+						block.renderIgnoreMaterial();
+					}
+				}
+			}
+		}
+		Block.MESH.unbind();
+		Shader.DEPTH.unbind();
+		depthMap.unbind();
+		depthMap.getTexture().bindTextureInUnit(2);
+		glViewport(0, 0, width, height);
+	}
+	
 	private static void renderShadowMap(){
 		if(!shadowsEnabled)
 			return;
@@ -337,6 +400,7 @@ public abstract class Pyraetos3D {
 		glClear(GL_DEPTH_BUFFER_BIT);
 		Shader.DEPTH.bind();
 		Shader.DEPTH.setUniform("ortho", orthographicMatrix);
+		Shader.DEPTH.setUniform("isOrtho", true);
 		Matrix lightViewMatrix = skybox.getLightViewMatrix();
 		for(Mesh mesh : models.keySet()){
 			mesh.bind();
@@ -396,6 +460,8 @@ public abstract class Pyraetos3D {
 			mesh.bind();
 			Set<Model> set = models.get(mesh);
 			for(Model model : set){
+				depthMap.getTexture().bindTextureInUnit(0);
+				model.getMaterial().setTexture(depthMap.getTexture());
 				if(isClose(model) || inFrustum(model.getModelViewMatrix(camera.getViewMatrix()))){
 					setModelWorldUniforms(model);
 					model.render();
@@ -427,6 +493,7 @@ public abstract class Pyraetos3D {
 	
 	private static void render(){
 		clear();
+		renderDepthMap();
 		renderShadowMap();
 		renderSkybox();
 		renderWorld();

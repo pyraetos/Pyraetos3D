@@ -67,6 +67,7 @@ public class Shader{
 		DEPTH.link();
 		DEPTH.createUniform("lightMV");
 		DEPTH.createUniform("ortho");
+		DEPTH.createUniform("isOrtho");
 	}
 	
 	private final int programId;
