@@ -65,7 +65,7 @@ public class Shader{
 		DEPTH.createVertexShader(Sys.load("res/vertexDepth.vs"));
 		DEPTH.createFragmentShader(Sys.load("res/fragmentDepth.fs"));
 		DEPTH.link();
-		DEPTH.createUniform("lightMV");
+		DEPTH.createUniform("mv");
 		DEPTH.createUniform("ortho");
 		DEPTH.createUniform("isOrtho");
 	}

@@ -21,9 +21,10 @@ public abstract class Pyraetos3D {
 
 	/*
 	 * TODO:
+	 * Fix FPS shadow issue. Examine ortho texture in quad
 	 * Test ways to add more underground blocks
 	 * Improve polymorphism of model classes
-	 * Reduce verbosity of rendering methods
+	 * Trees
 	 */
 	
 	//Constants
@@ -33,7 +34,7 @@ public abstract class Pyraetos3D {
 	public static final float FOV = Sys.toRadians(60.0f);
 	public static final float FAR_CLIP = 500.0f;
 	public static final float NEAR_CLIP = .05f;
-	public static final long FRAME_TIME = 17l;
+	public static final long FRAME_TIME = 16l;
 	public static final float SHADOW_BOX_WIDTH = 128f;
 	public static final float SHADOW_BOX_HEIGHT = 128f;
 	public static final float SHADOW_BOX_DEPTH = 128f;
@@ -122,7 +123,7 @@ public abstract class Pyraetos3D {
 		glfwMakeContextCurrent(window);
 		
 		// Enable v-sync
-		glfwSwapInterval(1);
+		//glfwSwapInterval(1);
 
 		// Make the window visible
 		glfwShowWindow(window);
@@ -329,7 +330,7 @@ public abstract class Pyraetos3D {
 		float x = vecPH1.getX();
 		float y = vecPH1.getY();
 		float z = vecPH1.getZ();
-		return x > -1.25f && x < 1.25f && y > -1.25f && y < 1.25f && z > -0.05f && z < 1.25f;
+		return x > -1.3f && x < 1.3f && y > -1.3f && y < 1.3f && z > -0.05f && z < 1.3f;
 	}
 	
 	private static boolean isClose(Model m){
@@ -405,7 +406,7 @@ public abstract class Pyraetos3D {
 				for(Block block : r.getBlocks()){
 					if(light || isClose(block) || inFrustum(block.getModelViewMatrix(viewMatrix))){
 						MatrixBuffer modelViewMatrix = light ? block.getLightModelViewMatrix(viewMatrix) : block.getModelViewMatrix(viewMatrix);
-						Shader.DEPTH.setUniform("lightMV", modelViewMatrix);
+						Shader.DEPTH.setUniform("mv", modelViewMatrix);
 						block.renderIgnoreMaterial();
 					}
 				}
@@ -417,7 +418,7 @@ public abstract class Pyraetos3D {
 		depthMap.getTexture().bindTextureInUnit(unit);
 		glViewport(0, 0, width, height);
 	}
-	
+
 	private static void renderShadowMap(){
 		if(!shadowsEnabled)
 			return;
