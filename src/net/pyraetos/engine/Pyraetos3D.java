@@ -21,10 +21,9 @@ public abstract class Pyraetos3D {
 
 	/*
 	 * TODO:
-	 * Implement SSAO
-	 * Implement depth culling
 	 * Test ways to add more underground blocks
 	 * Improve polymorphism of model classes
+	 * Reduce verbosity of rendering methods
 	 */
 	
 	//Constants
@@ -69,8 +68,7 @@ public abstract class Pyraetos3D {
 	private static float remainingPitch;
 	
 	//Light
-	private static ShadowMap shadowMap;
-	private static ShadowMap depthMap;
+	private static DepthMap shadowMap;
 	private static boolean shadowsEnabled;
 	
 	//Game objects
@@ -142,8 +140,7 @@ public abstract class Pyraetos3D {
 		camera.setTranslation(0f, 5f, 10f);
 	    
 		//Initialize shadow map
-		shadowMap = new ShadowMap();
-		depthMap = new ShadowMap();
+		shadowMap = new DepthMap();
 		shadowsEnabled = true;
 
 	    //Initialize projection
@@ -162,11 +159,6 @@ public abstract class Pyraetos3D {
 	    
 	    //Initialize model map
 	    models = new ConcurrentHashMap<Mesh, Set<Model>>();
-	    Quad tx = new Quad(0, 10, -10);
-	    tx.rotate(Sys.PI / 2f, 0f, 0f);
-	    Set<Model> s = Sys.concurrentSet(Model.class);
-	    s.add(tx);
-	    models.put(tx.getMesh(), s);
 	    
 	    //Initialize regions
 	    beingGenerated = Sys.concurrentSet(int[].class);
@@ -241,6 +233,10 @@ public abstract class Pyraetos3D {
 		set.remove(model);
 	}
 
+	private static int toRegionCoord(float coord){
+		return coord < 0 ? (int)coord / 32 - 1 : (int)coord / 32;
+	}
+	
 	private static void windowInput(){
 		checkResize();
 		glfwPollEvents();
@@ -344,162 +340,6 @@ public abstract class Pyraetos3D {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	}
 	
-	private static void renderDepthMap(){
-		if(!shadowsEnabled)
-			return;
-		depthMap.bind();
-		glViewport(0, 0, ShadowMap.WIDTH, ShadowMap.HEIGHT);
-		glClear(GL_DEPTH_BUFFER_BIT);
-		Shader.DEPTH.bind();
-		Shader.DEPTH.setUniform("ortho", perspectiveMatrix);
-		Shader.DEPTH.setUniform("isOrtho", false);
-		Matrix viewMatrix = camera.getViewMatrix();
-		//Don't do these right now
-		/*
-		for(Mesh mesh : models.keySet()){
-			mesh.bind();
-			Set<Model> set = models.get(mesh);
-			for(Model model : set){
-				MatrixBuffer lightModelViewMatrix = model.getLightModelViewMatrix(lightViewMatrix);
-				Shader.DEPTH.setUniform("lightMV", lightModelViewMatrix);
-				model.renderIgnoreMaterial();
-			}
-			mesh.unbind();
-		}
-		*/
-		Block.MESH.bind();
-		int rx = toRegionCoord(camera.getX());
-		int ry = toRegionCoord(camera.getZ());
-		for(int ri = rx - 1; ri <= rx + 1; ri++){
-			for(int rj = ry - 1; rj <= ry + 1; rj++){
-				if(regions[ri + (1<<8)][rj + (1<<8)] == null){
-					continue;
-				}
-				Region r = regions[ri + (1<<8)][rj + (1<<8)];
-				for(Block block : r.getBlocks()){
-					if(isClose(block) || inFrustum(block.getModelViewMatrix(viewMatrix))){
-						MatrixBuffer modelViewMatrix = block.getModelViewMatrix(viewMatrix);
-						Shader.DEPTH.setUniform("lightMV", modelViewMatrix);
-						block.renderIgnoreMaterial();
-					}
-				}
-			}
-		}
-		Block.MESH.unbind();
-		Shader.DEPTH.unbind();
-		depthMap.unbind();
-		depthMap.getTexture().bindTextureInUnit(2);
-		glViewport(0, 0, width, height);
-	}
-	
-	private static void renderShadowMap(){
-		if(!shadowsEnabled)
-			return;
-		shadowMap.bind();
-		glViewport(0, 0, ShadowMap.WIDTH, ShadowMap.HEIGHT);
-		glClear(GL_DEPTH_BUFFER_BIT);
-		Shader.DEPTH.bind();
-		Shader.DEPTH.setUniform("ortho", orthographicMatrix);
-		Shader.DEPTH.setUniform("isOrtho", true);
-		Matrix lightViewMatrix = skybox.getLightViewMatrix();
-		for(Mesh mesh : models.keySet()){
-			mesh.bind();
-			Set<Model> set = models.get(mesh);
-			for(Model model : set){
-				MatrixBuffer lightModelViewMatrix = model.getLightModelViewMatrix(lightViewMatrix);
-				Shader.DEPTH.setUniform("lightMV", lightModelViewMatrix);
-				model.renderIgnoreMaterial();
-			}
-			mesh.unbind();
-		}
-		Block.MESH.bind();
-		int rx = toRegionCoord(camera.getX());
-		int ry = toRegionCoord(camera.getZ());
-		for(int ri = rx - 1; ri <= rx + 1; ri++){
-			for(int rj = ry - 1; rj <= ry + 1; rj++){
-				if(regions[ri + (1<<8)][rj + (1<<8)] == null){
-					continue;
-				}
-				Region r = regions[ri + (1<<8)][rj + (1<<8)];
-				for(Block block : r.getBlocks()){
-					MatrixBuffer lightModelViewMatrix = block.getLightModelViewMatrix(lightViewMatrix);
-					Shader.DEPTH.setUniform("lightMV", lightModelViewMatrix);
-					block.renderIgnoreMaterial();
-				}
-			}
-		}
-		Block.MESH.unbind();
-		Shader.DEPTH.unbind();
-		shadowMap.unbind();
-		shadowMap.getTexture().bindTextureInUnit(1);
-		glViewport(0, 0, width, height);
-	}
-	
-	private static void renderSkybox(){
-		Shader.NO_LIGHT.bind();
-		Shader.NO_LIGHT.setUniform("proj", perspectiveMatrix);
-		MatrixBuffer modelViewMatrix = skybox.getModelViewMatrix(camera.getViewMatrix());
-		Shader.NO_LIGHT.setUniform("modelView", modelViewMatrix);
-		Shader.NO_LIGHT.setUniform("color", skybox.getMaterial().getColor());
-		Shader.NO_LIGHT.setUniform("useColor", skybox.getMaterial().usesColor() ? 1 : 0);
-		Shader.NO_LIGHT.setUniform("texture_sampler", 0);
-		Skybox.MESH.bind();
-		skybox.render();
-		Skybox.MESH.unbind();
-		Shader.NO_LIGHT.unbind();
-	}
-
-	private static int toRegionCoord(float coord){
-		return coord < 0 ? (int)coord / 32 - 1 : (int)coord / 32;
-	}
-	
-	private static void renderWorld(){
-		Shader.WORLD.bind();
-		setGlobalWorldUniforms();
-		for(Mesh mesh : models.keySet()){
-			mesh.bind();
-			Set<Model> set = models.get(mesh);
-			for(Model model : set){
-				depthMap.getTexture().bindTextureInUnit(0);
-				model.getMaterial().setTexture(depthMap.getTexture());
-				if(isClose(model) || inFrustum(model.getModelViewMatrix(camera.getViewMatrix()))){
-					setModelWorldUniforms(model);
-					model.render();
-				}
-			}
-			mesh.unbind();
-		}
-		Block.MESH.bind();
-		int rx = toRegionCoord(camera.getX());
-		int ry = toRegionCoord(camera.getZ());
-		for(int ri = rx - 1; ri <= rx + 1; ri++){
-			for(int rj = ry -1; rj <= ry +1; rj++){
-				if(regions[ri + (1<<8)][rj + (1<<8)] == null){
-					genRegionAsync(ri, rj);
-					continue;
-				}
-				Region r = regions[ri + (1<<8)][rj + (1<<8)];
-				for(Block block : r.getBlocks()){
-					if(isClose(block) || inFrustum(block.getModelViewMatrix(camera.getViewMatrix()))){
-						setModelWorldUniforms(block);
-						block.render();
-					}
-				}
-			}
-		}
-		Block.MESH.unbind();
-		Shader.WORLD.unbind();
-	}
-	
-	private static void render(){
-		clear();
-		renderDepthMap();
-		renderShadowMap();
-		renderSkybox();
-		renderWorld();
-		glfwSwapBuffers(window);
-	}
-	
 	private static void setGlobalWorldUniforms(){
 		Shader.WORLD.setUniform("proj", perspectiveMatrix);
 		Shader.WORLD.setUniform("ortho", orthographicMatrix);
@@ -527,6 +367,124 @@ public abstract class Pyraetos3D {
 		Matrix viewMatrix = camera.getViewMatrix();
 		MatrixBuffer modelViewMatrix = model.getModelViewMatrix(viewMatrix);
 		Shader.WORLD.setUniform("modelView", modelViewMatrix);
+	}
+	
+	private static void renderDepthMap(DepthMap depthMap, boolean ortho, boolean light, int unit){
+		depthMap.bind();
+		glViewport(0, 0, DepthMap.WIDTH, DepthMap.HEIGHT);
+		glClear(GL_DEPTH_BUFFER_BIT);
+		Shader.DEPTH.bind();
+		Shader.DEPTH.setUniform("ortho", ortho ? orthographicMatrix : perspectiveMatrix);
+		Shader.DEPTH.setUniform("isOrtho", ortho);
+		Matrix viewMatrix = light ? skybox.getLightViewMatrix() : camera.getViewMatrix();
+		
+		//Render models to texture
+		for(Mesh mesh : models.keySet()){
+			mesh.bind();
+			Set<Model> set = models.get(mesh);
+			for(Model model : set){
+				if(light || isClose(model) || inFrustum(model.getModelViewMatrix(camera.getViewMatrix()))){
+					MatrixBuffer modelViewMatrix = light ? model.getLightModelViewMatrix(viewMatrix) : model.getModelViewMatrix(viewMatrix);
+					Shader.DEPTH.setUniform("mv", modelViewMatrix);
+					model.renderIgnoreMaterial();
+				}
+			}
+			mesh.unbind();
+		}
+		
+		//Render blocks
+		Block.MESH.bind();
+		int rx = toRegionCoord(camera.getX());
+		int ry = toRegionCoord(camera.getZ());
+		for(int ri = rx - 1; ri <= rx + 1; ri++){
+			for(int rj = ry - 1; rj <= ry + 1; rj++){
+				if(regions[ri + (1<<8)][rj + (1<<8)] == null){
+					continue;
+				}
+				Region r = regions[ri + (1<<8)][rj + (1<<8)];
+				for(Block block : r.getBlocks()){
+					if(light || isClose(block) || inFrustum(block.getModelViewMatrix(viewMatrix))){
+						MatrixBuffer modelViewMatrix = light ? block.getLightModelViewMatrix(viewMatrix) : block.getModelViewMatrix(viewMatrix);
+						Shader.DEPTH.setUniform("lightMV", modelViewMatrix);
+						block.renderIgnoreMaterial();
+					}
+				}
+			}
+		}
+		Block.MESH.unbind();
+		Shader.DEPTH.unbind();
+		depthMap.unbind();
+		depthMap.getTexture().bindTextureInUnit(unit);
+		glViewport(0, 0, width, height);
+	}
+	
+	private static void renderShadowMap(){
+		if(!shadowsEnabled)
+			return;
+		renderDepthMap(shadowMap, true, true, 1);
+	}
+	
+	private static void renderSkybox(){
+		Shader.NO_LIGHT.bind();
+		Shader.NO_LIGHT.setUniform("proj", perspectiveMatrix);
+		MatrixBuffer modelViewMatrix = skybox.getModelViewMatrix(camera.getViewMatrix());
+		Shader.NO_LIGHT.setUniform("modelView", modelViewMatrix);
+		Shader.NO_LIGHT.setUniform("color", skybox.getMaterial().getColor());
+		Shader.NO_LIGHT.setUniform("useColor", skybox.getMaterial().usesColor() ? 1 : 0);
+		Shader.NO_LIGHT.setUniform("texture_sampler", 0);
+		Skybox.MESH.bind();
+		skybox.render();
+		Skybox.MESH.unbind();
+		Shader.NO_LIGHT.unbind();
+	}
+	
+	private static void renderWorld(){
+		Shader.WORLD.bind();
+		setGlobalWorldUniforms();
+		
+		//Iterate through models sets and render
+		for(Mesh mesh : models.keySet()){
+			mesh.bind();
+			Set<Model> set = models.get(mesh);
+			for(Model model : set){
+				if(isClose(model) || inFrustum(model.getModelViewMatrix(camera.getViewMatrix()))){
+					setModelWorldUniforms(model);
+					model.render();
+				}
+			}
+			mesh.unbind();
+		}
+		
+		//Iterate through all regions and render blocks
+		Block.MESH.bind();
+		int rx = toRegionCoord(camera.getX());
+		int ry = toRegionCoord(camera.getZ());
+		for(int ri = rx - 1; ri <= rx + 1; ri++){
+			for(int rj = ry -1; rj <= ry +1; rj++){
+				if(regions[ri + (1<<8)][rj + (1<<8)] == null){
+					genRegionAsync(ri, rj);
+					continue;
+				}
+				Region r = regions[ri + (1<<8)][rj + (1<<8)];
+				for(Block block : r.getBlocks()){
+					if(isClose(block) || inFrustum(block.getModelViewMatrix(camera.getViewMatrix()))){
+						setModelWorldUniforms(block);
+						block.render();
+					}
+				}
+			}
+		}
+		
+		Block.MESH.unbind();
+		Shader.WORLD.unbind();
+	}
+	
+	private static void render(){
+		clear();
+		renderShadowMap();
+		renderSkybox();
+		renderWorld();
+		glfwSwapBuffers(window);
 	}
 	
 	private static void checkResize(){

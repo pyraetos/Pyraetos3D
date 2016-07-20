@@ -5,7 +5,7 @@ import static org.lwjgl.opengl.GL13.*;
 import static org.lwjgl.opengl.GL30.*;
 
 @SuppressWarnings("unused")
-public class ShadowMap{
+public class DepthMap{
 
 	public static final int WIDTH = 1 << 12;
 	public static final int HEIGHT = 1 << 12;
@@ -13,7 +13,7 @@ public class ShadowMap{
 	private int fbo;
 	private Texture texture;
 	
-	public ShadowMap(){
+	public DepthMap(){
 		fbo = glGenFramebuffers();
 		texture = new Texture(WIDTH, HEIGHT, GL_DEPTH_COMPONENT);
 		bind();

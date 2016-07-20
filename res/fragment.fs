@@ -99,13 +99,6 @@ float shadow(){
     return 1f - shadowFactor / 25f;
 }
 
-/*float ssao(){
-	vec3 dmappos = texture(depthMap, ssTexCoord).xyz;
-	
-	float occFactor = 0f;
-	
-}*/
-
 void main()
 {
 	vec4 color;
