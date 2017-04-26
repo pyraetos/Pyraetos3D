@@ -13,7 +13,15 @@ import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.system.MemoryUtil.*;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.DatagramSocket;
+import java.net.SocketException;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -38,6 +46,13 @@ public abstract class Pyraetos3D {
 	public static final float SHADOW_BOX_WIDTH = 128f;
 	public static final float SHADOW_BOX_HEIGHT = 128f;
 	public static final float SHADOW_BOX_DEPTH = 128f;
+	public static final float GRAV_ACCEL = -.003f;
+	
+	//Behavioral constants
+	//MODES:
+	//0 - Region-based, infinite, procedural
+	//1 - SoundTown
+	public static final int MODE = 1;
 	
 	//Window
 	private static long window;
@@ -49,6 +64,7 @@ public abstract class Pyraetos3D {
 	//Input
 	private static boolean mouseWheelUp;
 	private static boolean mouseWheelDown;
+	private static Set<Integer> keysDown;
 	
 	//Performance
 	private static int pCounter = 0;
@@ -59,13 +75,12 @@ public abstract class Pyraetos3D {
 	private static float aspect;
 	private static MatrixBuffer perspectiveMatrix;
 	private static MatrixBuffer orthographicMatrix;
-	private static MatrixBuffer orthographicDepthMatrix;
 	private static Matrix frustumPH = new Matrix();
 	private static Vector vecPH0 = new Vector(0,0,0);
 	private static Vector vecPH1 = new Vector(0,0,0);
 	
 	//Camera
-	private static Camera camera;
+	public static Camera camera;
 	private static float remainingPitch;
 	
 	//Light
@@ -75,9 +90,33 @@ public abstract class Pyraetos3D {
 	//Game objects
 	private static Skybox skybox;
 	private static Map<Mesh, Set<Model>> models;
+	public static Set<CollisionPlane> colls = new HashSet<CollisionPlane>();
 	private static Region[][] regions;
 	private static PGenerate pg;
 	private static Set<int[]> beingGenerated;
+	
+	//Game variables
+	private static boolean flight = true;
+	private static float gravVelocity = 0f;
+
+	//SoundTown variables
+	public static int myID = -1;
+	public static MyClientSocket client;
+	public static Player other;
+	public static long lastup = 0;
+	public static Scanner scanner = new Scanner(System.in);
+	public static LinkedList<String> scaninput = new LinkedList<String>();
+	public static Vector kp1 = new Vector(1f, 0f, -95.98f);
+	public static Door p1d1;
+	public static Door p1d2;
+	public static Door p2d1;
+	public static Door p2d2;
+	private static boolean win = false;
+	public static Sound sound;
+	
+	public static void win(){
+		win = true;
+	}
 	
 	private static void init() {
 		// Setup an error callback. The default implementation
@@ -136,6 +175,9 @@ public abstract class Pyraetos3D {
 		glCullFace(GL_BACK);
 		glDepthFunc(GL_LEQUAL);
 		
+		//Initialize keys down set
+		keysDown = new HashSet<Integer>();
+		
 		//Start camera
 		camera = new Camera();
 		camera.setTranslation(0f, 5f, 10f);
@@ -151,9 +193,6 @@ public abstract class Pyraetos3D {
 	    orthographicMatrix = new MatrixBuffer();
 	    GraphicsUtil.orthographicProjection(orthographicMatrix, -SHADOW_BOX_WIDTH/2f, SHADOW_BOX_WIDTH/2f, -SHADOW_BOX_HEIGHT/2f, SHADOW_BOX_HEIGHT/2f, -SHADOW_BOX_DEPTH/2f, SHADOW_BOX_DEPTH/2f);
 	    orthographicMatrix.updateBuffer();
-	    orthographicDepthMatrix = new MatrixBuffer();
-	    GraphicsUtil.orthographicProjection(orthographicDepthMatrix, -SHADOW_BOX_WIDTH/8f, SHADOW_BOX_WIDTH/8f, -SHADOW_BOX_HEIGHT/8f, SHADOW_BOX_HEIGHT/8f, 0f, SHADOW_BOX_DEPTH/2f);
-	    orthographicDepthMatrix.updateBuffer();
 	    
 	    //Initialize skybox
 	    skybox = new Skybox(Skybox.MORNING);
@@ -162,21 +201,174 @@ public abstract class Pyraetos3D {
 	    models = new ConcurrentHashMap<Mesh, Set<Model>>();
 	    
 	    //Initialize regions
-	    beingGenerated = Sys.concurrentSet(int[].class);
-	    regions = new Region[1<<9][1<<9];
-	    pg = new PGenerate(1<<14, 1<<14);
-	    pg.setEntropy(9f);
-	    for(int rx = -1; rx < 1; rx++){
-	    	for(int ry = -1; ry < 1; ry++){
-	    		genRegion(rx, ry);
-		    }
-	    }
+	    genStartup();
+	    
+	    //add render to texture debugging quad
+	    //Quad quad = new Quad(0f, 0f, -3f);
+	    //quad.rotate(Sys.PI/2f, 0f, 0f);
+	    //quad.getMaterial().setTexture(shadowMap.getTexture());
+	    //addModel(quad);
 	    
 	    //GraphicsUtil.saveMesh(Skybox.MESH, "res/skybox/skybox.msh");
 	    //GraphicsUtil.saveMesh(Block.MESH, "res/block.msh");
+
+	    //if soundtown
+	    if(MODE == 1){
+	    	flight = false;
+	    	client = new MyClientSocket();
+	    	client.send(new LoginPacket());
+	    	initScanner();
+	    	Sys.thread(sound);
+	    }
 	    
 	    //Begin the game loop
-		loop();
+	    loop();
+	}
+
+	private static void initScanner(){
+		Sys.thread(()->{
+			while(true){
+				scaninput.offer(scanner.nextLine());
+			}
+		});
+	}
+	
+	private static void genStartup(){
+		switch(MODE){
+		case(0):{
+			beingGenerated = Sys.concurrentSet(int[].class);
+			regions = new Region[1<<9][1<<9];
+			pg = new PGenerate(1<<14, 1<<14);
+			pg.setEntropy(6f);//Default 9
+			for(int rx = -1; rx < 1; rx++){
+				for(int ry = -1; ry < 1; ry++){
+					genRegion(rx, ry);
+				}
+			}
+		}
+		case(1):{
+			makeP1Part();
+			makeP2Part();
+			shadowsEnabled = false;
+		}
+		}
+	}
+	
+	private static void makeP1Part(){
+		ShortHallway hw = new ShortHallway(0f, 0f);
+		for(WallSegment ws : hw.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : hw.getColls())
+			colls.add(c);
+		
+		Room r = new Room(-9f, -16f);
+		for(WallSegment ws : r.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : r.getColls())
+			colls.add(c);
+		
+		p1d1 = new Door(.5f, -32f);
+		for(Model m : p1d1.getModels())
+			addModel(m);
+		for(CollisionPlane c : p1d1.getColls())
+			colls.add(c);
+		
+		ShortHallway hw2 = new ShortHallway(0f, -32f);
+		for(WallSegment ws : hw2.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : hw2.getColls())
+			colls.add(c);
+		
+		Room r2 = new Room(-9f, -48f);
+		for(WallSegment ws : r2.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : r2.getColls())
+			colls.add(c);
+		
+		p1d2 = new Door(.5f, -64f);
+		for(Model m : p1d2.getModels())
+			addModel(m);
+		for(CollisionPlane c : p1d2.getColls())
+			colls.add(c);
+		
+		ShortHallway hw3 = new ShortHallway(0f, -64f);
+		for(WallSegment ws : hw3.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : hw3.getColls())
+			colls.add(c);
+		
+		RoomOneDoor r3 = new RoomOneDoor(-9f, -80f);
+		for(WallSegment ws : r3.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : r3.getColls())
+			colls.add(c);
+		
+		Keypad kp = new Keypad(kp1.getX(), kp1.getY(), kp1.getZ());
+		for(Model m : kp.getModels())
+			addModel(m);
+	}
+	
+	private static void makeP2Part(){
+		float disp = 30f;
+		ShortHallway hw2 = new ShortHallway(disp + 0f, 0f);
+		for(WallSegment ws : hw2.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : hw2.getColls())
+			colls.add(c);
+		
+		Room r = new Room(disp + -9f, -16f);
+		for(WallSegment ws : r.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : r.getColls())
+			colls.add(c);
+		
+		p2d1 = new Door(disp + .5f, -32f);
+		for(Model m : p2d1.getModels())
+			addModel(m);
+		for(CollisionPlane c : p2d1.getColls())
+			colls.add(c);
+		
+		ShortHallway hw = new ShortHallway(disp + 0f, -32f);
+		for(WallSegment ws : hw.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : hw.getColls())
+			colls.add(c);
+		
+		Room r2 = new Room(disp + -9f, -48f);
+		for(WallSegment ws : r2.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : r2.getColls())
+			colls.add(c);
+		
+		p2d2 = new Door(disp + .5f, -64f);
+		for(Model m : p2d2.getModels())
+			addModel(m);
+		for(CollisionPlane c : p2d2.getColls())
+			colls.add(c);
+		
+		Hallway hw3 = new Hallway(disp + 0f, -64f);
+		for(WallSegment ws : hw3.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : hw3.getColls())
+			colls.add(c);
+		
+		RoomOneDoor rod = new RoomOneDoor(disp + -9f, -96f);
+		for(WallSegment ws : rod.getWalls())
+			for(Model m : ws.getModels())
+				addModel(m);
+		for(CollisionPlane c : rod.getColls())
+			colls.add(c);
 	}
 	
 	private static void genRegion(int rx, int ry){
@@ -243,20 +435,48 @@ public abstract class Pyraetos3D {
 		glfwPollEvents();
 	}
 	
+	private static long lastSpaceReleased = 0;
+	private static boolean spaceIsReleased = false;
+	private static long lastSpacePressed = 0;
+	private static boolean checkToggleFlightCondition(){
+		return lastSpacePressed < lastSpaceReleased && (Sys.time() - lastSpacePressed < 500) && (Sys.time() - lastSpaceReleased < 500);
+	}
+	
+	private static void toggleFlight(){
+		flight = !flight;
+		gravVelocity = 0f;
+	}
+	
 	public static boolean isKeyPressed(int keyCode){
 		return glfwGetKey(window, keyCode) == GLFW_PRESS;
 	}
 	
 	private static void keyboardInput(){
+		float spd = flight ? 0.15f : 0.07f;
 		if(isKeyPressed(GLFW_KEY_W)){
-			camera.translate(0f, 0f, -0.15f);
+			moveWithCollisions(0f, 0f, -spd);
 		}else if(isKeyPressed(GLFW_KEY_S)){
-			camera.translate(0f, 0f, 0.15f);
+			moveWithCollisions(0f, 0f, spd);
 		}
 		if(isKeyPressed(GLFW_KEY_SPACE)){
-			camera.translate(0f, 0.15f, 0.0f);
-		}else if(isKeyPressed(GLFW_KEY_LEFT_SHIFT)){
-			camera.translate(0f, -0.15f, 0f);
+			if(checkToggleFlightCondition()){
+				toggleFlight();
+				lastSpaceReleased = 0;
+			}else{
+				if(flight) moveWithCollisions(0f, 0.15f, 0.0f);
+			}
+			if(spaceIsReleased){
+				lastSpacePressed = Sys.time();
+				spaceIsReleased = false;
+			}
+		}else{
+			if(!spaceIsReleased){
+				lastSpaceReleased = Sys.time();
+				spaceIsReleased = true;
+			}
+			if(isKeyPressed(GLFW_KEY_LEFT_SHIFT)){
+				if(flight) moveWithCollisions(0f, -0.15f, 0f);
+			}
 		}
 		if(isKeyPressed(GLFW_KEY_A)){
 			updateCameraYaw(-0.05f);
@@ -264,7 +484,12 @@ public abstract class Pyraetos3D {
 			updateCameraYaw(0.05f);
 		}
 		if(isKeyPressed(GLFW_KEY_P)){
-			setShadowsEnabled(!shadowsEnabled);
+			if(!keysDown.contains(GLFW_KEY_P)){
+				setShadowsEnabled(!shadowsEnabled);
+				keysDown.add(GLFW_KEY_P);
+			}
+		}else{
+			keysDown.remove(GLFW_KEY_P);
 		}
 	}
 	
@@ -282,11 +507,51 @@ public abstract class Pyraetos3D {
 			mouseWheelDown = false;
 		}
 	}
-	
+
+	private static void scannerInput(){
+		if(scaninput.isEmpty()){
+			return;
+		}
+		if(Sys.distanceFrom(camera.getTranslation(), kp1) < 2f){
+			String raw = scaninput.poll();
+			if(raw.length() == 4){
+				try{
+					int code = Integer.parseInt(raw);
+					Sys.debug("You have entered \"" + code + "\" into the keypad!");
+					client.send(new ActionPacket("kp1" + raw));
+				}catch(Exception e){}
+			}
+		}else{
+			scaninput.clear();
+		}
+	}
+
 	private static void input(){
+		if(MODE == 1){
+			scannerInput();
+		}
 		windowInput();
 		keyboardInput();
 		mouseInput();
+	}
+	
+	private static void moveWithCollisions(float dx, float dy, float dz){
+		Vector curr = new Vector(camera.getX(), camera.getY(), camera.getZ());
+		camera.translate(dx, dy, dz);
+		Vector fut = camera.getTranslation();
+		
+		for(CollisionPlane coll : colls){
+			if(coll.collides(curr, fut)){
+				if(coll.normal == 'x')
+					camera.setTranslation(curr.getX(), camera.getY(), camera.getZ());
+				if(coll.normal == 'y'){
+					camera.setTranslation(camera.getX(), curr.getY(), camera.getZ());
+					gravVelocity = 0f;
+				}
+				if(coll.normal == 'z')
+					camera.setTranslation(camera.getX(), camera.getY(), curr.getZ());
+			}
+		}
 	}
 	
 	private static void cameraPitch(){
@@ -314,12 +579,38 @@ public abstract class Pyraetos3D {
 		}
 	}
 	
+	private static void applyGravity(){
+		gravVelocity += GRAV_ACCEL;
+		moveWithCollisions(0f, gravVelocity, 0f);
+	}
+	
+	private static void updatePacket(){
+		if(System.currentTimeMillis() - lastup > 100){
+			client.send(new UpdatePacket());
+			lastup = System.currentTimeMillis();
+		}
+	}
+	
 	private static void update(){
 		cameraPitch();
+		if(!flight)
+			applyGravity();
 		skybox.setTranslation(camera.getTranslation());
-		for(Set<Model> set : models.values())
-			for(Model m : set)
-				m.setTranslation(camera.getX(), camera.getY(), camera.getZ() - 3);
+		if(MODE != 1){
+			for(Set<Model> set : models.values())
+				for(Model m : set)
+					m.setTranslation(camera.getX(), camera.getY(), camera.getZ() - 3);
+		}else{
+			while(myID == -1){
+				Sys.sleep(200);
+			}
+			if(win){
+    			YouWin yw = new YouWin(2f, 0f, -95.98f);
+    			for(Model m : yw.getModels()) Pyraetos3D.addModel(m);
+    			win = false;
+			}
+			updatePacket();
+		}
 		updatePerformance();
 	}
 
@@ -345,12 +636,22 @@ public abstract class Pyraetos3D {
 		Shader.WORLD.setUniform("proj", perspectiveMatrix);
 		Shader.WORLD.setUniform("ortho", orthographicMatrix);
 		Shader.WORLD.setUniform("texture_sampler", 0);
-		Shader.WORLD.setUniform("ambientLight", skybox.getAmbientLight());
+		if(MODE == 1){
+			Shader.WORLD.setUniform("ambientLight", new Vector(.225f,.225f,.225f));
+		}else{
+			Shader.WORLD.setUniform("ambientLight", skybox.getAmbientLight());
+		}
 		DirectionalLight sun = skybox.getSun();
 		Vector dest = sun.getVectorDest();
 		Vector dir = sun.getDirection();
 		camera.view(dest, dir);
 		Shader.WORLD.setUniform("directionalDir", dest);
+		Shader.WORLD.setUniform("dirColor", new Vector(1.3f,1.3f,1.3f));
+		if(MODE == 1){
+			Shader.WORLD.setUniform("useDirectionalLight", 0);
+		}else{
+			Shader.WORLD.setUniform("useDirectionalLight", 1);
+		}
 		Shader.WORLD.setUniform("fogColor", skybox.getFogColor());
 		Shader.WORLD.setUniform("fogDensity", .025f);
 		Shader.WORLD.setUniform("useShadows", shadowsEnabled);
@@ -420,7 +721,7 @@ public abstract class Pyraetos3D {
 	}
 
 	private static void renderShadowMap(){
-		if(!shadowsEnabled)
+		if(!shadowsEnabled || MODE == 1)
 			return;
 		renderDepthMap(shadowMap, true, true, 1);
 	}
@@ -455,28 +756,29 @@ public abstract class Pyraetos3D {
 			}
 			mesh.unbind();
 		}
-		
+
 		//Iterate through all regions and render blocks
-		Block.MESH.bind();
-		int rx = toRegionCoord(camera.getX());
-		int ry = toRegionCoord(camera.getZ());
-		for(int ri = rx - 1; ri <= rx + 1; ri++){
-			for(int rj = ry -1; rj <= ry +1; rj++){
-				if(regions[ri + (1<<8)][rj + (1<<8)] == null){
-					genRegionAsync(ri, rj);
-					continue;
-				}
-				Region r = regions[ri + (1<<8)][rj + (1<<8)];
-				for(Block block : r.getBlocks()){
-					if(isClose(block) || inFrustum(block.getModelViewMatrix(camera.getViewMatrix()))){
-						setModelWorldUniforms(block);
-						block.render();
+		if(MODE == 0){
+			Block.MESH.bind();
+			int rx = toRegionCoord(camera.getX());
+			int ry = toRegionCoord(camera.getZ());
+			for(int ri = rx - 1; ri <= rx + 1; ri++){
+				for(int rj = ry -1; rj <= ry + 1; rj++){
+					if(regions[ri + (1<<8)][rj + (1<<8)] == null){
+						genRegionAsync(ri, rj);
+						continue;
+					}
+					Region r = regions[ri + (1<<8)][rj + (1<<8)];
+					for(Block block : r.getBlocks()){
+						if(isClose(block) || inFrustum(block.getModelViewMatrix(camera.getViewMatrix()))){
+							setModelWorldUniforms(block);
+							block.render();
+						}
 					}
 				}
 			}
+			Block.MESH.unbind();
 		}
-		
-		Block.MESH.unbind();
 		Shader.WORLD.unbind();
 	}
 	

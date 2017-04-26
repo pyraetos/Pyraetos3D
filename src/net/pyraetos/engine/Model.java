@@ -3,6 +3,7 @@ package net.pyraetos.engine;
 import java.io.Serializable;
 
 import net.pyraetos.util.Matrix;
+import net.pyraetos.util.Sys;
 import net.pyraetos.util.Vector;
 
 @SuppressWarnings("serial")
@@ -17,8 +18,11 @@ public abstract class Model extends MovableObject implements Serializable{
 
 	protected Material material;
 	
+	protected long uid;
+	
 	public Model(float x, float y, float z){
 		super(x, y, z);
+		uid = Sys.randomSeed();
 		scale = new Vector(1f, 1f, 1f);
 		scaleMatrix = new Matrix();
 		modelViewMatrix = new MatrixBuffer();
@@ -29,6 +33,7 @@ public abstract class Model extends MovableObject implements Serializable{
 	
 	public Model(){
 		super();
+		uid = Sys.randomSeed();
 		scale = new Vector(1f, 1f, 1f);
 		scaleMatrix = new Matrix();
 		modelViewMatrix = new MatrixBuffer();
@@ -88,4 +93,27 @@ public abstract class Model extends MovableObject implements Serializable{
 	}
 
 	public abstract Mesh getMesh();
+
+	@Override
+	public int hashCode(){
+		final int prime = 31;
+		int result = super.hashCode();
+		result = prime * result + (int)(uid ^ (uid >>> 32));
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj){
+		if(this == obj)
+			return true;
+		if(!super.equals(obj))
+			return false;
+		if(getClass() != obj.getClass())
+			return false;
+		Model other = (Model)obj;
+		if(uid != other.uid)
+			return false;
+		return true;
+	}
+
 }

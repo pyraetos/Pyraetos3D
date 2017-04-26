@@ -31,11 +31,13 @@ out vec4 fragColor;
 uniform sampler2D texture_sampler;
 uniform sampler2D shadowMap;
 uniform int useShadows;
+uniform int useDirectionalLight;
 uniform vec3 ambientLight;
 uniform Material material;
 //uniform PointLight pointLight;
 uniform vec3 cameraPosition;
 uniform vec3 directionalDir;
+uniform vec3 dirColor;
 uniform vec3 fogColor;
 uniform float fogDensity;
 
@@ -67,9 +69,12 @@ vec4 light()
 	
 	//Directional
 	float dirAmt = max(dot(normal, normalize(directionalDir)), 0.0);
-	vec4 dirColor = vec4(1.3, 1.3, 1.3, 1.0) * dirAmt;
-	
-	return /*(diffuseColor + specularColor) / attenuation +*/ dirColor;
+	vec4 dColor = vec4(dirColor, 1.0) * dirAmt;
+	if(useDirectionalLight == 0)
+	{
+		dColor = vec4(0,0,0,1);
+	}
+	return /*(diffuseColor + specularColor) / attenuation +*/ dColor;
 }
 
 float fog(){
@@ -82,21 +87,21 @@ float fog(){
 
 float shadow(){
 	float shadowFactor = 0.0;
-	vec3 texCoords = lightMVVertex.xyz * 0.5 + 0.5;
-	if(texCoords.z > 1.0){
-		return 1.0;
-	}
-	float bias = 0.001f * tan(acos(dot(normal, directionalDir)));
+	vec2 texCoords;
+	texCoords.x = lightMVVertex.x * 0.5 + 0.5;
+	texCoords.y = lightMVVertex.y * 0.5 + 0.5;
+	float z = lightMVVertex.z * 0.5 + 0.5;
+	float bias = clamp(0.001f * tan(acos(dot(normal, directionalDir))), 0.001f, 0.05f);
     vec2 inc = 1.0 / textureSize(shadowMap, 0);
     for(int x = -2; x <= 2; x++)
     {
     	for(int y = -2; y <= 2; y++)
     	{
-    		float depth = texture(shadowMap, texCoords.xy + vec2(x, y) * inc).r;
-    		shadowFactor += texCoords.z - bias > depth ? 1.0 : 0.0;
+    		float depth = texture(shadowMap, texCoords + vec2(x, y) * inc).r;
+    		shadowFactor += z - bias > depth ? 1.0 : 0.0;
     	}
     }
-    return 1f - shadowFactor / 25f;
+    return 1.0 - shadowFactor / 25.0;
 }
 
 void main()
@@ -107,9 +112,8 @@ void main()
    	}else{
    		color = texture(texture_sampler, texCoord);
    	}
-   	float shadow = useShadows == 1 ? shadow() : 1f;
-    vec4 shadowedLightColor = shadow <= 0.01f ? vec4(0f, 0f, 0f, 0f) : light() * shadow;
-    vec4 totalLight = vec4(ambientLight, 1.0) + shadowedLightColor;
+   	float shadow = useShadows == 1 ? shadow() : 1.0;
+    vec4 totalLight = vec4(ambientLight*7, 1.0) + light() * shadow;
    	
    	float fogFactor = fog();
    	fragColor = (1.0 - fogFactor) * vec4(fogColor, 1.0) + fogFactor * color * totalLight;

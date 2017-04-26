@@ -34,7 +34,7 @@ public class Skybox extends Model{
 		case MORNING: t = GraphicsUtil.loadTexture("res/skybox/morning.png");
 			fogColor = new Vector(.847f, .8f, .69f);
 			ambientColor = new Vector(0.35f, 0.3f, 0.2f);
-			light = new DirectionalLight(new Vector(0,1f,0));/*(-0.615457f, 0.492366f, -0.615457f));*/
+			light = new DirectionalLight(new Vector/*(0,1f,0));*/(-0.615457f, 0.492366f, -0.615457f));
 			break;
 		case DAY: t = GraphicsUtil.loadTexture("res/skybox/day.png");
 			fogColor = new Vector(0.5686f, 0.549f, 0.506f);
@@ -42,6 +42,11 @@ public class Skybox extends Model{
 			light = new DirectionalLight(new Vector(-0.301511f, 0.904534f, -0.301511f));
 			break;
 		case SUNSET: t = GraphicsUtil.loadTexture("res/skybox/sunset.png");
+			fogColor = new Vector(0.427f, 0.424f, 0.478f);
+			ambientColor = new Vector(0.45f, 0.2f, 0.2f);
+			light = new DirectionalLight(new Vector(-0.666667f, 0.333333f, -0.666667f));
+			break;
+		case DESERT: t = GraphicsUtil.loadTexture("res/skybox/desert.png");
 			fogColor = new Vector(0.427f, 0.424f, 0.478f);
 			ambientColor = new Vector(0.45f, 0.2f, 0.2f);
 			light = new DirectionalLight(new Vector(-0.666667f, 0.333333f, -0.666667f));

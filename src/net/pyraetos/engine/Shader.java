@@ -32,6 +32,8 @@ public class Shader{
 		WORLD.createUniform("texture_sampler");
 		WORLD.createUniform("ambientLight");
 		WORLD.createUniform("directionalDir");
+		WORLD.createUniform("dirColor");
+		WORLD.createUniform("useDirectionalLight");
 		WORLD.createUniform("fogColor");
 		WORLD.createUniform("fogDensity");
 		WORLD.createUniform("lightMV");
