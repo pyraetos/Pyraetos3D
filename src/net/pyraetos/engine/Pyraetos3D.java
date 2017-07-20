@@ -2,6 +2,7 @@ package net.pyraetos.engine;
 
 import org.lwjgl.glfw.*;
 import org.lwjgl.opengl.GL;
+import org.lwjgl.system.Library;
 
 import net.pyraetos.pgenerate.PGenerate;
 import net.pyraetos.util.Matrix;
@@ -18,6 +19,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.DatagramSocket;
 import java.net.SocketException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
@@ -107,12 +109,40 @@ public abstract class Pyraetos3D {
 	public static Scanner scanner = new Scanner(System.in);
 	public static LinkedList<String> scaninput = new LinkedList<String>();
 	public static Vector kp1 = new Vector(1f, 0f, -95.98f);
+	public static Vector kp2 = new Vector(30 + 1f, 0f, -111.98f);
+	public static Vector kb1 = new Vector(-5f, 0f, -63.98f);
+	public static Vector kb2 = new Vector(30f - 5f, 0f, -48.02f);
+	public static Vector pp1 = new Vector(6f, -.499f, -18.5f);
+	public static Vector pp2 = new Vector(30f - 7f, -.499f, -24.5f);
+	public static PressurePlate presp1;
+	public static PressurePlate presp2;
 	public static Door p1d1;
 	public static Door p1d2;
 	public static Door p2d1;
 	public static Door p2d2;
+	public static boolean typing = false;
 	private static boolean win = false;
+	public static boolean otherwin = false;
 	public static Sound sound;
+	public static boolean firstDoorsOpened = false;
+	
+	public static boolean playersOnPressurePlates(){
+		if(firstDoorsOpened) return false;
+		if(other == null) return false;
+		float p1x = myID == 1 ? camera.getX() : other.x; 
+		float p1z = myID == 1 ? camera.getZ() : other.z; 
+		float p2x = myID == 2 ? camera.getX() : other.x; 
+		float p2z = myID == 2 ? camera.getZ() : other.z; 
+		if(p1x > pp1.getX() + .35f || p1x < pp1.getX() - .35f) return false;
+		if(p1z > pp1.getZ() + .35f || p1z < pp1.getZ() - .35f) return false;
+		if(p2x > pp2.getX() + .35f || p2x < pp2.getX() - .35f) return false;
+		if(p2z > pp2.getZ() + .35f || p2z < pp2.getZ() - .35f) return false;
+		Sys.debug("First doors opened!");
+		presp1.setActivated(true);
+		presp2.setActivated(true);
+		firstDoorsOpened = true;
+		return true;
+	}
 	
 	public static void win(){
 		win = true;
@@ -121,6 +151,9 @@ public abstract class Pyraetos3D {
 	private static void init() {
 		// Setup an error callback. The default implementation
 		// will print the error message in System.err.
+		try{
+			Library.initialize();
+		}catch(Exception e){}catch(Error ee){}
 		GLFWErrorCallback.createPrint(System.err).set();
 
 		// Initialize GLFW. Most GLFW functions will not work before doing this.
@@ -312,6 +345,22 @@ public abstract class Pyraetos3D {
 		Keypad kp = new Keypad(kp1.getX(), kp1.getY(), kp1.getZ());
 		for(Model m : kp.getModels())
 			addModel(m);
+		
+		Number num = new Number(11f, 1f, -48.01f, 1031);
+		for(Model m : num.getModels())
+			addModel(m);
+		
+		Keyboard kb = new Keyboard(kb1.getX(), kb1.getY(), kb1.getZ());
+		for(Model m : kb.getModels())
+			addModel(m);
+		
+		Text t = new Text(-6f, 0f, -63.98f, "Computers");
+		for(Model m : t.getModels())
+			addModel(m);
+		
+		presp1 = new PressurePlate(pp1.getX(), pp1.getY(), pp1.getZ());
+		for(Model m : presp1.getModels())
+			addModel(m);
 	}
 	
 	private static void makeP2Part(){
@@ -369,6 +418,26 @@ public abstract class Pyraetos3D {
 				addModel(m);
 		for(CollisionPlane c : rod.getColls())
 			colls.add(c);
+		
+		Number num = new Number(disp + 5f, 1f, -16.01f, 5841);
+		for(Model m : num.getModels())
+			addModel(m);
+		
+		KeyboardInverted kbi = new KeyboardInverted(kb2.getX(), kb2.getY(), kb2.getZ());
+		for(Model m : kbi.getModels())
+			addModel(m);
+		
+		TextInverted ti = new TextInverted(disp - 5f, 1f, -48.02f, "NewMedia");
+		for(Model m : ti.getModels())
+			addModel(m);
+		
+		Keypad kp = new Keypad(kp2.getX(), kp2.getY(), kp2.getZ());
+		for(Model m : kp.getModels())
+			addModel(m);
+		
+		presp2 = new PressurePlate(pp2.getX(), pp2.getY(), pp2.getZ());
+		for(Model m : presp2.getModels())
+			addModel(m);
 	}
 	
 	private static void genRegion(int rx, int ry){
@@ -425,6 +494,13 @@ public abstract class Pyraetos3D {
 		Set<Model> set = models.get(mesh);
 		set.remove(model);
 	}
+	
+	public static void removeDoor(Door d){
+		for(Model m : d.getModels())
+			removeModel(m);
+		for(CollisionPlane coll : d.getColls())
+				colls.remove(coll);
+	}
 
 	private static int toRegionCoord(float coord){
 		return coord < 0 ? (int)coord / 32 - 1 : (int)coord / 32;
@@ -451,8 +527,34 @@ public abstract class Pyraetos3D {
 		return glfwGetKey(window, keyCode) == GLFW_PRESS;
 	}
 	
+	static String stringy = "";
 	private static void keyboardInput(){
 		float spd = flight ? 0.15f : 0.07f;
+		if(typing){
+			if(isKeyPressed(GLFW_KEY_ENTER)){
+				if(!keysDown.contains(GLFW_KEY_ENTER)){
+					System.out.println();
+					typing = false;
+					scaninput.offer(stringy);
+					stringy = "";
+					keysDown.add(GLFW_KEY_ENTER);
+				}
+			}else{
+				keysDown.remove(GLFW_KEY_ENTER);
+			}
+			for(int i = 48; i <= 122; i++){
+				if(isKeyPressed(i) && !keysDown.contains(i)){
+					int u = i;
+					if(u > 57 && !(isKeyPressed(GLFW_KEY_LEFT_SHIFT) || isKeyPressed(GLFW_KEY_RIGHT_SHIFT))){
+						u = u + 32;
+					}
+					System.out.print(((char)u));
+					stringy += Character.toString((char)u);
+					keysDown.add(i);
+				}else if(!isKeyPressed(i)) keysDown.remove(i);
+			}
+			return;
+		}
 		if(isKeyPressed(GLFW_KEY_W)){
 			moveWithCollisions(0f, 0f, -spd);
 		}else if(isKeyPressed(GLFW_KEY_S)){
@@ -491,6 +593,14 @@ public abstract class Pyraetos3D {
 		}else{
 			keysDown.remove(GLFW_KEY_P);
 		}
+		if(isKeyPressed(GLFW_KEY_ENTER)){
+			if(!keysDown.contains(GLFW_KEY_ENTER)){
+				keysDown.add(GLFW_KEY_ENTER);
+				typing = true;
+			}
+		}else{
+			keysDown.remove(GLFW_KEY_ENTER);
+		}
 	}
 	
 	private static void updateCameraYaw(float dyaw){
@@ -521,6 +631,30 @@ public abstract class Pyraetos3D {
 					client.send(new ActionPacket("kp1" + raw));
 				}catch(Exception e){}
 			}
+		}else
+		if(Sys.distanceFrom(camera.getTranslation(), kp2) < 2f){
+			String raw = scaninput.poll();
+			if(raw.length() == 4){
+				try{
+					int code = Integer.parseInt(raw);
+					Sys.debug("You have entered \"" + code + "\" into the keypad!");
+					client.send(new ActionPacket("kp2" + raw));
+				}catch(Exception e){}
+			}
+		}else
+		if(Sys.distanceFrom(camera.getTranslation(), kb1) < 2f){
+			String raw = scaninput.poll();
+			try{
+				Sys.debug("You have entered \"" + raw + "\" into the keypad!");
+				client.send(new ActionPacket("kb1" + raw));
+			}catch(Exception e){}
+		}else
+		if(Sys.distanceFrom(camera.getTranslation(), kb2) < 2f){
+			String raw = scaninput.poll();
+			try{
+				Sys.debug("You have entered \"" + raw + "\" into the keypad!");
+				client.send(new ActionPacket("kb2" + raw));
+			}catch(Exception e){}
 		}else{
 			scaninput.clear();
 		}
@@ -604,8 +738,12 @@ public abstract class Pyraetos3D {
 			while(myID == -1){
 				Sys.sleep(200);
 			}
-			if(win){
-    			YouWin yw = new YouWin(2f, 0f, -95.98f);
+			if(playersOnPressurePlates()){
+				removeDoor(p1d1);
+				removeDoor(p2d1);
+			}
+			if(win && otherwin){
+    			YouWin yw = myID == 1 ? new YouWin(2f, 0f, -95.98f) : new YouWin(30 + 2f, 0f, -111.98f);
     			for(Model m : yw.getModels()) Pyraetos3D.addModel(m);
     			win = false;
 			}

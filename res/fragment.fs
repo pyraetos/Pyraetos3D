@@ -113,7 +113,7 @@ void main()
    		color = texture(texture_sampler, texCoord);
    	}
    	float shadow = useShadows == 1 ? shadow() : 1.0;
-    vec4 totalLight = vec4(ambientLight*7, 1.0) + light() * shadow;
+    vec4 totalLight = vec4(ambientLight, 1.0) + light() * shadow;
    	
    	float fogFactor = fog();
    	fragColor = (1.0 - fogFactor) * vec4(fogColor, 1.0) + fogFactor * color * totalLight;

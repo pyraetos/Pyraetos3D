@@ -127,13 +127,24 @@ public class MyClientSocket implements Runnable{
     public void handleActionApproved(){
     	try{
     		String data = in.readLine();
-    		if(data.equals("p1d1")){
-    			for(Model m : Pyraetos3D.p1d1.getModels()) Pyraetos3D.removeModel(m);
-    			for(CollisionPlane c : Pyraetos3D.p1d1.getColls()) Pyraetos3D.colls.remove(c);
-    		}
     		if(data.equals("p1youwin")){
-    			Pyraetos3D.win();
-    		}
+    			if(Pyraetos3D.myID == 1)
+    				Pyraetos3D.win();
+    			else Pyraetos3D.otherwin = true;
+    		}else
+        	if(data.equals("p2youwin")){
+        		if(Pyraetos3D.myID == 2)
+    				Pyraetos3D.win();
+    			else Pyraetos3D.otherwin = true;
+        	}else
+            if(data.equals("p1d2")){
+            	for(Model m : Pyraetos3D.p1d2.getModels()) Pyraetos3D.removeModel(m);
+    			for(CollisionPlane c : Pyraetos3D.p1d2.getColls()) Pyraetos3D.colls.remove(c);
+            }else
+            if(data.equals("p2d2")){
+                for(Model m : Pyraetos3D.p2d2.getModels()) Pyraetos3D.removeModel(m);
+        		for(CollisionPlane c : Pyraetos3D.p2d2.getColls()) Pyraetos3D.colls.remove(c);
+            }
     	}catch(Throwable e){
     		e.printStackTrace();
     	}

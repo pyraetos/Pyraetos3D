@@ -1,5 +1,7 @@
 package net.pyraetos.engine;
 
+import net.pyraetos.util.Vector;
+
 /**
  * Created by Denise on 3/28/2017.
  */
@@ -16,4 +18,8 @@ public class Player {
 		this.z = z;
 	}
 
+	public Vector getPosition(){
+		return new Vector(x,y,z);
+	}
+	
 }

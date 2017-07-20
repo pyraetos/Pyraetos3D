@@ -36,6 +36,12 @@ public class Sound implements Runnable{
 		}
 	}
 
+	public float getAttenuation(){
+		float d = Sys.distanceFrom(Pyraetos3D.camera.getTranslation(), Pyraetos3D.other.getPosition());
+		float att = (float)Math.pow(2, -0.075f * d) * 81f - 80f;
+		return att;
+	}
+	
 	public void startQToSpeaker(){
 		Sys.thread(()->{
 			SourceDataLine sourceDataLine;
@@ -52,11 +58,10 @@ public class Sound implements Runnable{
 					DatagramPacket packet = new DatagramPacket(recvBuf, 10000);
 					local.receive(packet);
 					int len = packet.getLength();
-					Sys.debug("Received sound of length " + len);
 					if(sourceDataLine.isControlSupported(FloatControl.Type.MASTER_GAIN))
 					{
 						FloatControl volume = (FloatControl) sourceDataLine.getControl(FloatControl.Type.MASTER_GAIN);
-						volume.setValue(0.0F);//use this to adjust the output
+						volume.setValue(getAttenuation());//use this to adjust the output
 					}
 					sourceDataLine.write(recvBuf,  0, len);
 				}
@@ -95,7 +100,6 @@ public class Sound implements Runnable{
 					int amtRead = microphone.read(data, 0, CHUNK_SIZE);
 					DatagramPacket packet = new DatagramPacket(data, amtRead, remoteIP, 55556);
 					local.send(packet);
-					Sys.debug("Sending sound of length " + amtRead);
 				}
 			}finally{
 				microphone.close();
