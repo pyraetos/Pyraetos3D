@@ -54,7 +54,7 @@ public abstract class Pyraetos3D {
 	//MODES:
 	//0 - Region-based, infinite, procedural
 	//1 - SoundTown
-	public static final int MODE = 1;
+	public static final int MODE = 0;
 	
 	//Window
 	private static long window;
